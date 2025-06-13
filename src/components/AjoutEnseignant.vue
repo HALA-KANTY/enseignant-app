@@ -106,7 +106,8 @@ export default {
         taux_horaire: '',
         nombre_heures: ''
       },
-      loading: false
+      loading: false,
+      apiUrl: 'https://steeven.wuaze.com/api/enseignants.php' // URL de production
     }
   },
   computed: {
@@ -132,10 +133,20 @@ export default {
           }
           break
         case 'taux_horaire':
-          this.errors.taux_horaire = this.form.taux_horaire >= 0 ? '' : 'Le taux horaire doit être positif'
+          // Validation numérique améliorée
+          if (isNaN(this.form.taux_horaire) || this.form.taux_horaire < 0) {
+            this.errors.taux_horaire = 'Doit être un nombre positif'
+          } else {
+            this.errors.taux_horaire = ''
+          }
           break
         case 'nombre_heures':
-          this.errors.nombre_heures = this.form.nombre_heures >= 0 ? '' : 'Le nombre d\'heures doit être positif'
+          // Validation numérique améliorée
+          if (isNaN(this.form.nombre_heures) || this.form.nombre_heures < 0) {
+            this.errors.nombre_heures = 'Doit être un entier positif'
+          } else {
+            this.errors.nombre_heures = ''
+          }
           break
       }
     },
@@ -153,52 +164,64 @@ export default {
         nombre_heures: ''
       }
     },
-  async ajouterEnseignant() {
-  Object.keys(this.form).forEach(field => this.validateField(field));
+    async ajouterEnseignant() {
+      // Validation complète
+      Object.keys(this.form).forEach(field => this.validateField(field));
+      
+      if (this.hasErrors) {
+        this.toast.error('Veuillez corriger les erreurs');
+        return;
+      }
 
-  if (this.hasErrors) {
-    this.toast.error('Veuillez corriger les erreurs dans le formulaire');
-    return;
-  }
+      this.loading = true;
 
-  this.loading = true;
+      const user_id = localStorage.getItem('user_id');
+      if (!user_id) {
+        this.toast.error('Authentification requise');
+        this.$router.push('/login');
+        return;
+      }
 
-  const user_id = localStorage.getItem('user_id');
-  if (!user_id) {
-    this.toast.error('Vous devez être connecté');
-    this.loading = false;
-    return;
-  }
+      try {
+        // Formatage des données numériques
+        const payload = {
+          ...this.form,
+          user_id,
+          taux_horaire: parseFloat(this.form.taux_horaire),
+          nombre_heures: parseInt(this.form.nombre_heures)
+        };
 
-  const payload = { ...this.form, user_id };
+        const response = await fetch(this.apiUrl, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
 
-  try {
-    // Changer l'URL ici : retirer ?action=register
-    const response = await fetch('http://localhost/enseignant-api/api/enseignants.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+        const data = await response.json();
 
-    const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(data.message || "Erreur lors de l'ajout");
+        }
 
-    if (!response.ok || !data) {
-      throw new Error((data && data.message) || 'Erreur de connexion');
+        this.toast.success(data.message || 'Enseignant ajouté avec succès');
+        this.resetForm();
+        
+        // Émettre un événement pour rafraîchir la liste
+        this.$emit('enseignant-ajoute');
+
+      } catch (error) {
+        console.error("Erreur API:", error);
+        this.toast.error(error.message || 'Erreur serveur');
+      } finally {
+        this.loading = false;
+      }
     }
-
-    this.toast.success(data.message || 'Ajout réussi 🎉');
-    this.resetForm();
-
-  } catch (error) {
-    this.toast.error(error.message || 'Erreur inattendue ❌');
-  } finally {
-    this.loading = false;
   }
 }
-
-  }}
 </script>
-
 <style scoped>
 .error-message {
   position: absolute;
