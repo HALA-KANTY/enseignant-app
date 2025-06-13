@@ -45,51 +45,68 @@ export default {
       totalPrestation: 0,
       minPrestation: 0,
       maxPrestation: 0,
-      chart: null
+      chart: null,
+      apiUrl: 'https://steeven.wuaze.com/api/enseignants.php' // URL de production
     }
   },
   async mounted() {
-  Chart.register(...registerables);
-  await this.chargerDonnees();
-},
+    Chart.register(...registerables);
+    await this.chargerDonnees();
+  },
   methods: {
     formatNumber(num) {
       return num.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
     },
     
-   async chargerDonnees() {
-  try {
-    const user_id = localStorage.getItem('user_id');
-    if (!user_id) {
-      console.error("Utilisateur non connecté");
-      return;
-    }
-    const response = await axios.get(`http://localhost/enseignant-api/api/enseignants.php?user_id=${user_id}`);
-    this.enseignants = response.data;
-    this.calculerStatistiques();
-    this.initChart();  // Init chart après avoir chargé les données
-  } catch (error) {
-    console.error("Erreur:", error);
-  }
-},
+    async chargerDonnees() {
+      try {
+        const user_id = localStorage.getItem('user_id');
+        if (!user_id) {
+          console.error("Utilisateur non connecté");
+          this.$router.push('/login');
+          return;
+        }
 
-    
-  calculerStatistiques() {
-  const prestations = this.enseignants.map(e => e.taux_horaire * e.nombre_heures);
-  
-  this.totalPrestation = prestations.reduce((a, b) => a + b, 0);
-  
-  // Gérer le cas où le tableau est vide
-  if (prestations.length === 0) {
-    this.minPrestation = 0;
-    this.maxPrestation = 0;
-  } else {
-    this.minPrestation = Math.min(...prestations);
-    this.maxPrestation = Math.max(...prestations);
-  }
-},
+        const response = await axios.get(this.apiUrl, {
+          params: {
+            user_id: user_id
+          }
+        });
+        
+        // Conversion des types numériques
+        this.enseignants = response.data.map(enseignant => ({
+          ...enseignant,
+          taux_horaire: parseFloat(enseignant.taux_horaire),
+          nombre_heures: parseInt(enseignant.nombre_heures)
+        }));
+        
+        this.calculerStatistiques();
+        this.initChart();
+      } catch (error) {
+        console.error("Erreur:", error);
+        if (error.response?.status === 401) {
+          this.$router.push('/login');
+        }
+      }
+    },
+
+    calculerStatistiques() {
+      const prestations = this.enseignants.map(e => e.taux_horaire * e.nombre_heures);
+      
+      this.totalPrestation = prestations.reduce((a, b) => a + b, 0);
+      
+      if (prestations.length === 0) {
+        this.minPrestation = 0;
+        this.maxPrestation = 0;
+      } else {
+        this.minPrestation = Math.min(...prestations);
+        this.maxPrestation = Math.max(...prestations);
+      }
+    },
     
     initChart() {
+      if (!this.$refs.prestationChart) return;
+      
       const ctx = this.$refs.prestationChart.getContext('2d');
       
       if (this.chart) {
@@ -104,9 +121,9 @@ export default {
             label: 'Montant (AR)',
             data: [this.totalPrestation, this.minPrestation, this.maxPrestation],
             backgroundColor: [
-              '#5B8291', // Couleur pour le total (bleu)
-              '#F44336', // Couleur pour le minimum (rouge)
-              '#4CAF50'  // Couleur pour le maximum (vert)
+              '#5B8291',
+              '#F44336', 
+              '#4CAF50'
             ],
             borderColor: [
               '#2E424D',
@@ -125,8 +142,8 @@ export default {
             },
             tooltip: {
               callbacks: {
-                label: function(context) {
-                  return context.parsed.y.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ") + ' AR';
+                label: (context) => {
+                  return this.formatNumber(context.parsed.y) + ' AR';
                 }
               }
             }
@@ -146,8 +163,8 @@ export default {
                 color: 'rgba(0, 0, 0, 0.05)'
               },
               ticks: {
-                callback: function(value) {
-                  return value.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+                callback: (value) => {
+                  return this.formatNumber(value);
                 }
               }
             },
@@ -167,6 +184,11 @@ export default {
           }
         }
       });
+    }
+  },
+  beforeUnmount() {
+    if (this.chart) {
+      this.chart.destroy();
     }
   }
 }
