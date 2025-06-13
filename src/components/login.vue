@@ -290,49 +290,75 @@ export default {
       }
     },
     
-    async handleLogin() {
-      this.validateField('identifiant')
-      this.validateField('password')
-      
-      if (this.errors.identifiant || this.errors.password) {
-        this.toast.error('Veuillez corriger les erreurs dans le formulaire')
-        return
-      }
+   async handleLogin() {
+  // Validation
+  this.validateField('identifiant');
+  this.validateField('password');
+  
+  if (this.errors.identifiant || this.errors.password) {
+    this.toast.error('Veuillez corriger les erreurs dans le formulaire', { timeout: 3000 });
+    return;
+  }
 
-      this.isLoading = true
-      try {
-        const response = await fetch('https://steeven.wuaze.com/api/enseignants.php?action=login', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            identifiant: this.form.identifiant,
-            mdp: this.form.password
-          })
-        })
+  this.isLoading = true;
+  
+  try {
+    const response = await fetch('https://steeven.wuaze.com/api/enseignants.php?action=login', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        identifiant: this.form.identifiant,
+        mdp: this.form.password
+      })
+    });
 
-        const data = await response.json()
-        
-        if (!response.ok) {
-          throw new Error(data.message || "Identifiants incorrects")
-        }
+    // Vérifiez d'abord si la réponse est OK
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Échec de la connexion");
+    }
 
-        // Stockage des données utilisateur
-        localStorage.setItem('authToken', 'true') // À remplacer par un vrai token si disponible
-        localStorage.setItem('user', JSON.stringify(data.user))
-        localStorage.setItem('user_id', data.user.id)
-        
-        this.toast.success('Connexion réussie 🎉')
-        this.$router.push('/bilan')
-      } catch (error) {
-        this.toast.error(error.message || 'Erreur lors de la connexion')
-        this.form.password = ''
-      } finally {
-        this.isLoading = false
-      }
-    },
+    const data = await response.json();
+    
+    // Vérification supplémentaire des données
+    if (!data || !data.user) {
+      throw new Error("Réponse du serveur invalide");
+    }
+
+    // Stockage des données
+    localStorage.setItem('authToken', data.token || 'true');
+    localStorage.setItem('user', JSON.stringify(data.user));
+    localStorage.setItem('user_id', data.user.id);
+
+    // Toast de succès avec délai avant redirection
+    this.toast.success('Connexion réussie', { timeout: 2000 });
+    
+    // Petite pause avant la redirection
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    this.$router.push('/bilan');
+    
+  } catch (error) {
+    // Gestion d'erreur améliorée
+    console.error("Erreur de connexion:", error);
+    
+    let errorMessage = error.message;
+    if (error.message.includes('Failed to fetch')) {
+      errorMessage = "Erreur de connexion au serveur";
+    }
+    
+    this.toast.error(errorMessage, { 
+      timeout: 5000, // Reste affiché 5 secondes
+      closeOnClick: false // Empêche la fermeture au clic
+    });
+    
+    this.form.password = '';
+  } finally {
+    this.isLoading = false;
+  }
+},
     
     async handleRegister() {
       ['name', 'email', 'password', 'confirmPassword'].forEach(f => this.validateField(f))
