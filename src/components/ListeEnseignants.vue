@@ -127,8 +127,7 @@ export default {
       filteredEnseignants: [],
       showEditForm: false,
       editedTeacher: {
-        id : null,
-      
+        id: null,
         nom: '',
         taux_horaire: 0,
         nombre_heures: 0
@@ -136,13 +135,15 @@ export default {
       searchQuery: '',
       searchType: 'nom',
       originalEnseignants: [],
-      user_id: localStorage.getItem('user_id') || null
+      user_id: localStorage.getItem('user_id') || null,
+      apiBaseUrl: 'https://steeven.wuaze.com/api/enseignants.php' // Nouvelle URL de base
     };
   },
 
   mounted() {
     if (!this.user_id) {
-      this.toast.error('Utilisateur non connecté');
+      this.toast.error('Veuillez vous connecter');
+      this.$router.push('/login');
       return;
     }
     this.chargerEnseignants();
@@ -150,20 +151,23 @@ export default {
 
   methods: {
     async chargerEnseignants() {
-      if (!this.user_id) {
-        this.toast.error('Utilisateur non connecté');
-        return;
-      }
       try {
-        const response = await axios.get(`http://localhost/enseignant-api/api/enseignants.php?user_id=${this.user_id}`);
-        this.enseignants = response.data;
-        this.originalEnseignants = [...response.data];
-        this.filteredEnseignants = [...response.data];
+        const response = await axios.get(this.apiBaseUrl, {
+          params: {
+            user_id: this.user_id
+          }
+        });
+        
+        this.enseignants = response.data.map(teacher => ({
+          ...teacher,
+          taux_horaire: parseFloat(teacher.taux_horaire),
+          nombre_heures: parseInt(teacher.nombre_heures)
+        }));
+        
+        this.originalEnseignants = [...this.enseignants];
+        this.filteredEnseignants = [...this.enseignants];
       } catch (error) {
-        console.error("Erreur:", error.response?.data || error.message);
-        this.toast.error("Erreur lors du chargement : " + (error.response?.data?.message || error.message));
-        this.enseignants = [];
-        this.filteredEnseignants = [];
+        this.gestionErreur(error, 'chargement');
       }
     },
 
@@ -175,105 +179,94 @@ export default {
 
       const query = this.searchQuery.toLowerCase();
       this.filteredEnseignants = this.originalEnseignants.filter(enseignant => {
-        if (this.searchType === 'nom') {
-          return enseignant.nom.toLowerCase().includes(query);
-        } else {
-          return enseignant.matricule.toLowerCase().includes(query);
-        }
+        const fieldValue = enseignant[this.searchType]?.toString().toLowerCase() || '';
+        return fieldValue.includes(query);
       });
     },
 
-  async supprimerEnseignant(id) {
-  if (!this.user_id) {
-    this.toast.error('Utilisateur non connecté');
-    return;
-  }
-  if (confirm("Voulez-vous vraiment supprimer cet enseignant ?")) {
-    try {
-      await axios.delete(`http://localhost/enseignant-api/api/enseignants.php?id=${id}&user_id=${this.user_id}`);
-      await this.chargerEnseignants();
-      this.toast.success("Enseignant supprimé avec succès");
-    } catch (error) {
-      console.error("Erreur lors de la suppression:", error);
-      this.toast.error("Erreur lors de la suppression : " + (error.response?.data?.message || error.message));
-    }
-  }
-},
-
-
-
-    calculerPrestation(enseignant) {
-      if (!enseignant || typeof enseignant.taux_horaire !== 'number' || 
-          typeof enseignant.nombre_heures !== 'number') {
-        return '0.00';
+    async supprimerEnseignant(id) {
+      if (!confirm("Voulez-vous vraiment supprimer cet enseignant ?")) return;
+      
+      try {
+        await axios.delete(this.apiBaseUrl, {
+          params: {
+            id: id,
+            user_id: this.user_id
+          }
+        });
+        
+        await this.chargerEnseignants();
+        this.toast.success("Enseignant supprimé avec succès");
+      } catch (error) {
+        this.gestionErreur(error, 'suppression');
       }
-      return (enseignant.taux_horaire * enseignant.nombre_heures).toFixed(0);
     },
 
     modifierEnseignant(enseignant) {
-  this.editedTeacher = {
-    id: enseignant.id,
-    nom: enseignant.nom,
-    taux_horaire: parseFloat(enseignant.taux_horaire),
-    nombre_heures: parseInt(enseignant.nombre_heures)
-  };
-  this.showEditForm = true;
-},
+      this.editedTeacher = {
+        id: enseignant.id,
+        nom: enseignant.nom,
+        taux_horaire: parseFloat(enseignant.taux_horaire),
+        nombre_heures: parseInt(enseignant.nombre_heures)
+      };
+      this.showEditForm = true;
+    },
 
-
-   async validerModification() {
-  if (!this.user_id) {
-    this.toast.error('Utilisateur non connecté');
-    return;
-  }
-  if (confirm("Voulez-vous vraiment Modifier cet enseignant ?")) {
-    try {
-      const response = await axios({
-        method: 'put',
-        url: 'http://localhost/enseignant-api/api/enseignants.php',
-        data: {
-          ...this.editedTeacher,  // contient id, nom, taux_horaire, nombre_heures
+    async validerModification() {
+      if (!confirm("Confirmez-vous les modifications ?")) return;
+      
+      try {
+        const response = await axios.put(this.apiBaseUrl, {
+          ...this.editedTeacher,
           user_id: this.user_id
-        },
-        headers: {
-          'Content-Type': 'application/json'
+        }, {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.data.status === 'success') {
+          this.showEditForm = false;
+          await this.chargerEnseignants();
+          this.toast.success(response.data.message || "Modification réussie");
+        } else {
+          throw new Error(response.data.message || "Erreur lors de la modification");
         }
-      });
-
-      if (response.data.status === 'success') {
-        this.showEditForm = false;
-        await this.chargerEnseignants();
-        this.editedTeacher = {
-          id: null,
-          nom: '',
-          taux_horaire: 0,
-          nombre_heures: 0
-        };
-        this.toast.success("Modification enregistrée avec succès !");
-      } else {
-        throw new Error(response.data.message || "Erreur inconnue");
+      } catch (error) {
+        this.gestionErreur(error, 'modification');
       }
-    } catch (error) {
-      console.error("Erreur modification:", error);
-      this.toast.error("Erreur lors de la modification : " + (error.response?.data?.message || error.message));
-    }
-  }
-},
-
+    },
 
     annulerModification() {
       this.showEditForm = false;
       this.editedTeacher = {
-        matricule: '',
+        id: null,
         nom: '',
         taux_horaire: 0,
         nombre_heures: 0
       };
+    },
+
+    calculerPrestation(enseignant) {
+      if (!enseignant) return '0';
+      return (enseignant.taux_horaire * enseignant.nombre_heures).toFixed(0);
+    },
+
+    gestionErreur(error, operation) {
+      console.error(`Erreur ${operation}:`, error);
+      const message = error.response?.data?.message || 
+                     error.message || 
+                     `Erreur lors du ${operation}`;
+      
+      if (error.response?.status === 401) {
+        this.$router.push('/login');
+      }
+      
+      this.toast.error(message);
     }
   }
 };
 </script>
-
 
 <style scoped>
 .search-filter-container {
