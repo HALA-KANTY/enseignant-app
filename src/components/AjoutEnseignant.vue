@@ -106,8 +106,8 @@ export default {
         taux_horaire: '',
         nombre_heures: ''
       },
-      loading: false,
-      apiUrl: 'https://steeven.wuaze.com/api/enseignants.php' // URL de production
+      isLoading: false,
+      apiUrl: 'https://steeven.wuaze.com/api/enseignants.php'
     }
   },
   computed: {
@@ -124,25 +124,27 @@ export default {
     validateField(field) {
       switch(field) {
         case 'matricule':
-          this.errors.matricule = this.form.matricule ? '' : 'Le matricule est requis'
+          this.errors.matricule = this.form.matricule.trim() ? '' : 'Le matricule est requis'
           break
         case 'nom':
-          this.errors.nom = this.form.nom ? '' : 'Le nom est requis'
-          if (this.form.nom && this.form.nom.length < 3) {
+          this.errors.nom = this.form.nom.trim() ? '' : 'Le nom est requis'
+          if (this.form.nom.trim() && this.form.nom.trim().length < 3) {
             this.errors.nom = 'Le nom doit contenir au moins 3 caractères'
           }
           break
         case 'taux_horaire':
-          // Validation numérique améliorée
-          if (isNaN(this.form.taux_horaire) || this.form.taux_horaire < 0) {
+          if (!this.form.taux_horaire) {
+            this.errors.taux_horaire = 'Le taux horaire est requis'
+          } else if (isNaN(this.form.taux_horaire) || parseFloat(this.form.taux_horaire) <= 0) {
             this.errors.taux_horaire = 'Doit être un nombre positif'
           } else {
             this.errors.taux_horaire = ''
           }
           break
         case 'nombre_heures':
-          // Validation numérique améliorée
-          if (isNaN(this.form.nombre_heures) || this.form.nombre_heures < 0) {
+          if (!this.form.nombre_heures) {
+            this.errors.nombre_heures = 'Le nombre d\'heures est requis'
+          } else if (!Number.isInteger(parseFloat(this.form.nombre_heures)) || parseInt(this.form.nombre_heures) <= 0) {
             this.errors.nombre_heures = 'Doit être un entier positif'
           } else {
             this.errors.nombre_heures = ''
@@ -165,30 +167,31 @@ export default {
       }
     },
     async ajouterEnseignant() {
-      // Validation complète
+      // Validation complète avant soumission
       Object.keys(this.form).forEach(field => this.validateField(field));
       
       if (this.hasErrors) {
-        this.toast.error('Veuillez corriger les erreurs');
+        this.toast.error('Veuillez corriger les erreurs dans le formulaire');
         return;
       }
 
-      this.loading = true;
+      this.isLoading = true;
 
       const user_id = localStorage.getItem('user_id');
       if (!user_id) {
-        this.toast.error('Authentification requise');
+        this.toast.error('Session expirée, veuillez vous reconnecter');
         this.$router.push('/login');
         return;
       }
 
       try {
-        // Formatage des données numériques
         const payload = {
-          ...this.form,
-          user_id,
+          action: 'enseignants', // Action spécifique pour votre API
+          matricule: this.form.matricule.trim(),
+          nom: this.form.nom.trim(),
           taux_horaire: parseFloat(this.form.taux_horaire),
-          nombre_heures: parseInt(this.form.nombre_heures)
+          nombre_heures: parseInt(this.form.nombre_heures),
+          user_id: user_id
         };
 
         const response = await fetch(this.apiUrl, {
@@ -202,21 +205,27 @@ export default {
 
         const data = await response.json();
 
-        if (!response.ok) {
-          throw new Error(data.message || "Erreur lors de l'ajout");
+        if (!response.ok || data.status === 'error') {
+          throw new Error(data.message || "Erreur lors de l'ajout de l'enseignant");
         }
 
-        this.toast.success(data.message || 'Enseignant ajouté avec succès');
+        this.toast.success('Enseignant ajouté avec succès');
         this.resetForm();
         
-        // Émettre un événement pour rafraîchir la liste
-        this.$emit('enseignant-ajoute');
+        // Émettre un événement pour informer le parent
+        this.$emit('enseignant-ajoute', data);
 
       } catch (error) {
         console.error("Erreur API:", error);
-        this.toast.error(error.message || 'Erreur serveur');
+        
+        // Gestion spécifique des erreurs CORS
+        if (error.message.includes('Failed to fetch')) {
+          this.toast.error('Erreur de connexion au serveur');
+        } else {
+          this.toast.error(error.message || 'Erreur lors de la communication avec le serveur');
+        }
       } finally {
-        this.loading = false;
+        this.isLoading = false;
       }
     }
   }

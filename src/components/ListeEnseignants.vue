@@ -136,7 +136,8 @@ export default {
       searchType: 'nom',
       originalEnseignants: [],
       user_id: localStorage.getItem('user_id') || null,
-      apiBaseUrl: 'https://steeven.wuaze.com/api/enseignants.php' // Nouvelle URL de base
+      apiBaseUrl: 'https://steeven.wuaze.com/api/enseignants.php',
+      isLoading: false
     };
   },
 
@@ -151,23 +152,32 @@ export default {
 
   methods: {
     async chargerEnseignants() {
+      this.isLoading = true;
       try {
         const response = await axios.get(this.apiBaseUrl, {
           params: {
+            action: 'enseignants',
             user_id: this.user_id
           }
         });
         
+        if (response.data.status === 'error') {
+          throw new Error(response.data.message);
+        }
+
         this.enseignants = response.data.map(teacher => ({
           ...teacher,
           taux_horaire: parseFloat(teacher.taux_horaire),
-          nombre_heures: parseInt(teacher.nombre_heures)
+          nombre_heures: parseInt(teacher.nombre_heures),
+          prestation: parseFloat(teacher.taux_horaire) * parseInt(teacher.nombre_heures)
         }));
         
         this.originalEnseignants = [...this.enseignants];
         this.filteredEnseignants = [...this.enseignants];
       } catch (error) {
         this.gestionErreur(error, 'chargement');
+      } finally {
+        this.isLoading = false;
       }
     },
 
@@ -188,12 +198,17 @@ export default {
       if (!confirm("Voulez-vous vraiment supprimer cet enseignant ?")) return;
       
       try {
-        await axios.delete(this.apiBaseUrl, {
+        const response = await axios.delete(this.apiBaseUrl, {
           params: {
+            action: 'enseignants',
             id: id,
             user_id: this.user_id
           }
         });
+
+        if (response.data.status !== 'success') {
+          throw new Error(response.data.message || "Erreur lors de la suppression");
+        }
         
         await this.chargerEnseignants();
         this.toast.success("Enseignant supprimé avec succès");
@@ -216,22 +231,28 @@ export default {
       if (!confirm("Confirmez-vous les modifications ?")) return;
       
       try {
-        const response = await axios.put(this.apiBaseUrl, {
-          ...this.editedTeacher,
-          user_id: this.user_id
-        }, {
+        const response = await axios({
+          method: 'put',
+          url: this.apiBaseUrl,
+          params: {
+            action: 'enseignants'
+          },
+          data: {
+            ...this.editedTeacher,
+            user_id: this.user_id
+          },
           headers: {
             'Content-Type': 'application/json'
           }
         });
 
-        if (response.data.status === 'success') {
-          this.showEditForm = false;
-          await this.chargerEnseignants();
-          this.toast.success(response.data.message || "Modification réussie");
-        } else {
+        if (response.data.status !== 'success') {
           throw new Error(response.data.message || "Erreur lors de la modification");
         }
+
+        this.showEditForm = false;
+        await this.chargerEnseignants();
+        this.toast.success(response.data.message || "Modification réussie");
       } catch (error) {
         this.gestionErreur(error, 'modification');
       }
@@ -254,9 +275,15 @@ export default {
 
     gestionErreur(error, operation) {
       console.error(`Erreur ${operation}:`, error);
-      const message = error.response?.data?.message || 
-                     error.message || 
-                     `Erreur lors du ${operation}`;
+      
+      let message = error.response?.data?.message || 
+                   error.message || 
+                   `Erreur lors du ${operation}`;
+      
+      // Gestion spécifique des erreurs CORS
+      if (error.message && error.message.includes('Network Error')) {
+        message = "Problème de connexion au serveur. Vérifiez votre connexion internet.";
+      }
       
       if (error.response?.status === 401) {
         this.$router.push('/login');

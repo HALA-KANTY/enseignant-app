@@ -36,9 +36,16 @@
 <script>
 import { Chart, registerables } from 'chart.js';
 import axios from 'axios';
+import { useToast } from 'vue-toastification';
 
 export default {
   name: 'BilanEnseignants',
+  
+  setup() {
+    const toast = useToast();
+    return { toast };
+  },
+
   data() {
     return {
       enseignants: [],
@@ -46,61 +53,73 @@ export default {
       minPrestation: 0,
       maxPrestation: 0,
       chart: null,
-      apiUrl: 'https://steeven.wuaze.com/api/enseignants.php' // URL de production
+      isLoading: false,
+      apiUrl: 'https://steeven.wuaze.com/api/enseignants.php',
+      user_id: localStorage.getItem('user_id') || null
     }
   },
+  
   async mounted() {
     Chart.register(...registerables);
+    
+    if (!this.user_id) {
+      this.toast.error('Veuillez vous connecter');
+      this.$router.push('/login');
+      return;
+    }
+    
     await this.chargerDonnees();
   },
+  
   methods: {
     formatNumber(num) {
       return num.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
     },
     
     async chargerDonnees() {
+      this.isLoading = true;
       try {
-        const user_id = localStorage.getItem('user_id');
-        if (!user_id) {
-          console.error("Utilisateur non connecté");
-          this.$router.push('/login');
-          return;
-        }
-
         const response = await axios.get(this.apiUrl, {
           params: {
-            user_id: user_id
+            action: 'enseignants',
+            user_id: this.user_id
           }
         });
+        
+        if (response.data.status === 'error') {
+          throw new Error(response.data.message);
+        }
         
         // Conversion des types numériques
         this.enseignants = response.data.map(enseignant => ({
           ...enseignant,
           taux_horaire: parseFloat(enseignant.taux_horaire),
-          nombre_heures: parseInt(enseignant.nombre_heures)
+          nombre_heures: parseInt(enseignant.nombre_heures),
+          prestation: parseFloat(enseignant.taux_horaire) * parseInt(enseignant.nombre_heures)
         }));
         
         this.calculerStatistiques();
         this.initChart();
+        
       } catch (error) {
         console.error("Erreur:", error);
-        if (error.response?.status === 401) {
-          this.$router.push('/login');
-        }
+        this.gestionErreur(error);
+      } finally {
+        this.isLoading = false;
       }
     },
-
+    
     calculerStatistiques() {
-      const prestations = this.enseignants.map(e => e.taux_horaire * e.nombre_heures);
+      const prestations = this.enseignants.map(e => e.prestation);
       
       this.totalPrestation = prestations.reduce((a, b) => a + b, 0);
       
-      if (prestations.length === 0) {
-        this.minPrestation = 0;
-        this.maxPrestation = 0;
-      } else {
+      if (prestations.length > 0) {
         this.minPrestation = Math.min(...prestations);
         this.maxPrestation = Math.max(...prestations);
+      } else {
+        this.minPrestation = 0;
+        this.maxPrestation = 0;
       }
     },
     
@@ -109,6 +128,7 @@ export default {
       
       const ctx = this.$refs.prestationChart.getContext('2d');
       
+      // Détruire le graphique existant
       if (this.chart) {
         this.chart.destroy();
       }
@@ -121,14 +141,14 @@ export default {
             label: 'Montant (AR)',
             data: [this.totalPrestation, this.minPrestation, this.maxPrestation],
             backgroundColor: [
-              '#5B8291',
-              '#F44336', 
-              '#4CAF50'
+              'rgba(91, 130, 145, 0.7)',
+              'rgba(244, 67, 54, 0.7)',
+              'rgba(76, 175, 80, 0.7)'
             ],
             borderColor: [
-              '#2E424D',
-              '#C62828',
-              '#2E7D32'
+              'rgba(91, 130, 145, 1)',
+              'rgba(244, 67, 54, 1)',
+              'rgba(76, 175, 80, 1)'
             ],
             borderWidth: 1,
             borderRadius: 4
@@ -136,6 +156,7 @@ export default {
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           plugins: {
             legend: {
               display: false
@@ -145,6 +166,13 @@ export default {
                 label: (context) => {
                   return this.formatNumber(context.parsed.y) + ' AR';
                 }
+              }
+            },
+            title: {
+              display: true,
+              text: 'Statistiques des Prestations',
+              font: {
+                size: 16
               }
             }
           },
@@ -159,9 +187,6 @@ export default {
                   weight: 'bold'
                 }
               },
-              grid: {
-                color: 'rgba(0, 0, 0, 0.05)'
-              },
               ticks: {
                 callback: (value) => {
                   return this.formatNumber(value);
@@ -169,14 +194,6 @@ export default {
               }
             },
             x: {
-              title: {
-                display: true,
-                text: 'Statistiques',
-                font: {
-                  size: 14,
-                  weight: 'bold'
-                }
-              },
               grid: {
                 display: false
               }
@@ -184,8 +201,25 @@ export default {
           }
         }
       });
+    },
+    
+    gestionErreur(error) {
+      let message = "Erreur lors du chargement des données";
+      
+      if (error.response) {
+        if (error.response.status === 401) {
+          this.$router.push('/login');
+          return;
+        }
+        message = error.response.data?.message || message;
+      } else {
+        message = error.message || message;
+      }
+      
+      this.toast.error(message);
     }
   },
+  
   beforeUnmount() {
     if (this.chart) {
       this.chart.destroy();

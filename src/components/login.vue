@@ -147,8 +147,13 @@ export default {
   data() {
     return {
       isLogin: true,
-      identifiant: '',
-      password: '',
+      form: {
+        identifiant: '',
+        password: '',
+        name: '',
+        email: '',
+        confirmPassword: ''
+      },
       isLoading: false,
       showPassword: false,
       showRegisterPassword: false,
@@ -166,12 +171,6 @@ export default {
         name: '',
         email: '',
         confirmPassword: ''
-      },
-      registerData: {
-        name: '',
-        email: '',
-        password: '',
-        confirmPassword: ''
       }
     }
   },
@@ -182,35 +181,36 @@ export default {
   computed: {
     isRegisterFormValid() {
       return (
-        this.registerData.name &&
-        this.registerData.email &&
-        this.registerData.password &&
-        this.registerData.confirmPassword &&
+        this.form.name &&
+        this.form.email &&
+        this.form.password &&
+        this.form.confirmPassword &&
         !this.errors.name &&
         !this.errors.email &&
         !this.errors.password &&
         !this.errors.confirmPassword &&
-        this.registerData.password === this.registerData.confirmPassword
+        this.form.password === this.form.confirmPassword
       )
     }
   },
   methods: {
     toggleForm() {
       this.isLogin = !this.isLogin
-      this.clearFields()
+      this.clearForm()
+    },
+    
+    clearForm() {
+      this.form = {
+        identifiant: '',
+        password: '',
+        name: '',
+        email: '',
+        confirmPassword: ''
+      }
       this.clearErrors()
       this.clearTouched()
     },
-    clearFields() {
-      this.identifiant = ''
-      this.password = ''
-      this.registerData = {
-        name: '',
-        email: '',
-        password: '',
-        confirmPassword: ''
-      }
-    },
+    
     clearErrors() {
       this.errors = {
         identifiant: '',
@@ -220,6 +220,7 @@ export default {
         confirmPassword: ''
       }
     },
+    
     clearTouched() {
       this.touched = {
         identifiant: false,
@@ -229,74 +230,67 @@ export default {
         confirmPassword: false
       }
     },
-    toggleShowPassword() {
-      this.showPassword = !this.showPassword
+    
+    togglePassword(field) {
+      this[`show${field}`] = !this[`show${field}`]
     },
-    toggleShowRegisterPassword() {
-      this.showRegisterPassword = !this.showRegisterPassword
-    },
-    toggleShowRegisterConfirmPassword() {
-      this.showRegisterConfirmPassword = !this.showRegisterConfirmPassword
-    },
+    
     validateField(field) {
-  this.touched[field] = true
-  
-  // Déclarer la regex en dehors du switch (meilleure pratique)
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  
-  switch(field) {
-    case 'identifiant':
-      if (!this.identifiant) {
-        this.errors.identifiant = 'Veuillez entrer un identifiant'
-      } else {
-        this.errors.identifiant = ''
-      }
-      break
+      this.touched[field] = true
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       
-    case 'password':
-      if (!this.password && this.isLogin) {
-        this.errors.password = 'Veuillez entrer un mot de passe'
-      } else if (!this.registerData.password && !this.isLogin) {
-        this.errors.password = 'Veuillez entrer un mot de passe'
-      } else if (this.registerData.password.length < 4 && !this.isLogin) {
-        this.errors.password = 'Le mot de passe doit contenir au moins 4 caractères'
-      } else {
-        this.errors.password = ''
+      switch(field) {
+        case 'identifiant':
+          this.errors.identifiant = !this.form.identifiant ? 'Veuillez entrer un identifiant' : ''
+          break
+          
+        case 'password':
+          if (this.isLogin) {
+            this.errors.password = !this.form.password ? 'Veuillez entrer un mot de passe' : ''
+          } else {
+            if (!this.form.password) {
+              this.errors.password = 'Veuillez entrer un mot de passe'
+            } else if (this.form.password.length < 4) {
+              this.errors.password = 'Le mot de passe doit contenir au moins 4 caractères'
+            } else {
+              this.errors.password = ''
+            }
+          }
+          break
+          
+        case 'name':
+          if (!this.form.name) {
+            this.errors.name = 'Veuillez entrer votre nom complet'
+          } else if (this.form.name.length < 3) {
+            this.errors.name = 'Le nom doit contenir au moins 3 caractères'
+          } else {
+            this.errors.name = ''
+          }
+          break
+          
+        case 'email':
+          if (!this.form.email) {
+            this.errors.email = 'Veuillez entrer un email'
+          } else if (!emailRegex.test(this.form.email)) {
+            this.errors.email = 'Veuillez entrer un email valide'
+          } else {
+            this.errors.email = ''
+          }
+          break
+          
+        case 'confirmPassword':
+          if (!this.form.confirmPassword) {
+            this.errors.confirmPassword = 'Veuillez confirmer votre mot de passe'
+          } else if (this.form.password !== this.form.confirmPassword) {
+            this.errors.confirmPassword = 'Les mots de passe ne correspondent pas'
+          } else {
+            this.errors.confirmPassword = ''
+          }
+          break
       }
-      break
-      
-    case 'name':
-      if (!this.registerData.name) {
-        this.errors.name = 'Veuillez entrer votre nom complet'
-      } else if (this.registerData.name.length < 3) {
-        this.errors.name = 'Le nom doit contenir au moins 3 caractères'
-      } else {
-        this.errors.name = ''
-      }
-      break
-      
-    case 'email':
-      if (!this.registerData.email) {
-        this.errors.email = 'Veuillez entrer un email'
-      } else if (!emailRegex.test(this.registerData.email)) {
-        this.errors.email = 'Veuillez entrer un email valide'
-      } else {
-        this.errors.email = ''
-      }
-      break
-      
-    case 'confirmPassword':
-      if (!this.registerData.confirmPassword) {
-        this.errors.confirmPassword = 'Veuillez confirmer votre mot de passe'
-      } else if (this.registerData.password !== this.registerData.confirmPassword) {
-        this.errors.confirmPassword = 'Les mots de passe ne correspondent pas'
-      } else {
-        this.errors.confirmPassword = ''
-      }
-      break
-  }
-},
-  async handleLogin() {
+    },
+    
+    async handleLogin() {
       this.validateField('identifiant')
       this.validateField('password')
       
@@ -314,38 +308,35 @@ export default {
             'Accept': 'application/json'
           },
           body: JSON.stringify({
-            identifiant: this.identifiant,
-            mdp: this.password
+            identifiant: this.form.identifiant,
+            mdp: this.form.password
           })
         })
-        
+
         const data = await response.json()
         
         if (!response.ok) {
-          throw new Error(data.message || 'Identifiant ou mot de passe incorrect')
+          throw new Error(data.message || "Identifiants incorrects")
         }
 
         // Stockage des données utilisateur
+        localStorage.setItem('authToken', 'true') // À remplacer par un vrai token si disponible
         localStorage.setItem('user', JSON.stringify(data.user))
-        localStorage.setItem('authToken', 'true')
         localStorage.setItem('user_id', data.user.id)
         
         this.toast.success('Connexion réussie 🎉')
         this.$router.push('/bilan')
       } catch (error) {
         this.toast.error(error.message || 'Erreur lors de la connexion')
-        this.password = ''
+        this.form.password = ''
       } finally {
         this.isLoading = false
       }
     },
-
+    
     async handleRegister() {
-      this.validateField('name')
-      this.validateField('email')
-      this.validateField('password')
-      this.validateField('confirmPassword')
-
+      ['name', 'email', 'password', 'confirmPassword'].forEach(f => this.validateField(f))
+      
       if (!this.isRegisterFormValid) {
         this.toast.error('Veuillez corriger les erreurs dans le formulaire')
         return
@@ -360,9 +351,9 @@ export default {
             'Accept': 'application/json'
           },
           body: JSON.stringify({
-            name: this.registerData.name,
-            email: this.registerData.email,
-            password: this.registerData.password
+            name: this.form.name,
+            email: this.form.email,
+            password: this.form.password
           })
         })
         
@@ -374,7 +365,6 @@ export default {
 
         this.toast.success('Inscription réussie 🎉 Vous pouvez maintenant vous connecter.')
         this.toggleForm()
-        this.clearFields()
       } catch (error) {
         this.toast.error(error.message || "Erreur lors de la création du compte")
       } finally {
