@@ -296,41 +296,50 @@ export default {
       break
   }
 },
-   async handleLogin() {
-  this.validateField('identifiant')
-  this.validateField('password')
-  
-  if (this.errors.identifiant || this.errors.password) {
-    this.toast.error('Veuillez corriger les erreurs dans le formulaire')
-    return
-  }
+  async handleLogin() {
+      this.validateField('identifiant')
+      this.validateField('password')
+      
+      if (this.errors.identifiant || this.errors.password) {
+        this.toast.error('Veuillez corriger les erreurs dans le formulaire')
+        return
+      }
 
-  this.isLoading = true
-  try {
-    const response = await fetch('http://localhost/enseignant-api/api/enseignants.php?action=login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        identifiant: this.identifiant,
-        mdp: this.password
-      })
-    })
-    const data = await response.json().catch(() => null)
-    if (!response.ok || !data) {
-      throw new Error((data && data.message) || 'Erreur de connexion')
-    }
-    localStorage.setItem('user', JSON.stringify(data.user))
-    localStorage.setItem('authToken', 'true')
-    localStorage.setItem('user_id', data.user.id) // ✅ ajout ici
-    this.toast.success('Connexion réussie 🎉')
-    this.$router.push('/bilan')
-  } catch (error) {
-    this.toast.error(error.message || 'Erreur inattendue ❌')
-    this.password = ''
-  } finally {
-    this.isLoading = false
-  }
-},
+      this.isLoading = true
+      try {
+        const response = await fetch('https://steeven.wuaze.com/api/enseignants.php?action=login', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            identifiant: this.identifiant,
+            mdp: this.password
+          })
+        })
+        
+        const data = await response.json()
+        
+        if (!response.ok) {
+          throw new Error(data.message || 'Identifiant ou mot de passe incorrect')
+        }
+
+        // Stockage des données utilisateur
+        localStorage.setItem('user', JSON.stringify(data.user))
+        localStorage.setItem('authToken', 'true')
+        localStorage.setItem('user_id', data.user.id)
+        
+        this.toast.success('Connexion réussie 🎉')
+        this.$router.push('/bilan')
+      } catch (error) {
+        this.toast.error(error.message || 'Erreur lors de la connexion')
+        this.password = ''
+      } finally {
+        this.isLoading = false
+      }
+    },
+
     async handleRegister() {
       this.validateField('name')
       this.validateField('email')
@@ -344,23 +353,30 @@ export default {
 
       this.isLoading = true
       try {
-        const response = await fetch('http://localhost/enseignant-api/api/enseignants.php?action=register', {
+        const response = await fetch('https://steeven.wuaze.com/api/enseignants.php?action=register', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
           body: JSON.stringify({
             name: this.registerData.name,
             email: this.registerData.email,
             password: this.registerData.password
           })
         })
-        const data = await response.json().catch(() => null)
-        if (!response.ok || !data) {
-          throw new Error((data && data.message) || "Erreur lors de l'inscription")
+        
+        const data = await response.json()
+        
+        if (!response.ok) {
+          throw new Error(data.message || "Erreur lors de l'inscription")
         }
+
         this.toast.success('Inscription réussie 🎉 Vous pouvez maintenant vous connecter.')
         this.toggleForm()
+        this.clearFields()
       } catch (error) {
-        this.toast.error(error.message || "Erreur inattendue ❌")
+        this.toast.error(error.message || "Erreur lors de la création du compte")
       } finally {
         this.isLoading = false
       }
@@ -368,6 +384,7 @@ export default {
   }
 }
 </script>
+
 
 <style scoped>
 /* Styles de base */
